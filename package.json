@@ -4,10 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "watch": "node_modules/.bin/nodemon index.js",
+    "start": "NODE_ENV=production node index.js",
+    "watch": "NODE_ENV=development nodemon index.js",
     "lint": "eslint .",
-    "test": "jest --verbose"
+    "test": "NODE_ENV=test jest --verbose"
   },
   "repository": {
     "type": "git",
@@ -29,6 +29,7 @@
   "devDependencies": {
     "eslint": "^4.17.0",
     "jest": "^22.3.0",
-    "nodemon": "^1.15.0"
+    "nodemon": "^1.15.0",
+    "supertest": "^3.0.0"
   }
 }
