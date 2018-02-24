@@ -2,6 +2,7 @@ const supertest = require('supertest')
 const { app, server } = require('../index')
 const api = supertest(app)
 const Blog = require('../models/blog')
+const { format, blogsInDb } = require('./test_helper')
 
 const initialBlogs = [
   {
@@ -63,47 +64,146 @@ const newBlog = {
   url: 'https://css-tricks.com/snippets/css/a-guide-to-flexbox'
 }
 
+const newBlogWithoutTitle = {
+  author: 'Chris Coyier',
+  url: 'https://css-tricks.com/snippets/css/a-guide-to-flexbox'
+}
+
+const newBlogWithoutUrl = {
+  title: 'A Complete Guide to Flexbox',
+  author: 'Chris Coyier'
+}
+
 beforeAll(async () => {
   await Blog.remove({})
   await Blog.insertMany(initialBlogs)
 })
 
-describe('GET /api/blogs tests', () => {
-  test('blogs are returned as json', async () => {
-    await api
+describe('when there\' initially some blogs in db', () => {
+  beforeAll(async () => {
+    await Blog.remove({})
+    const blogObjects = initialBlogs.map(n => new Blog(n))
+    await Promise.all(blogObjects.map(n => n.save()))
+  })
+
+  test('all blogs are returned as json by GET /api/blogs', async () => {
+    const blogsInDatabase = await blogsInDb()
+
+    const response = await api
       .get('/api/blogs')
       .expect(200)
       .expect('Content-Type', /application\/json/)
+
+    expect(response.body.length).toBe(blogsInDatabase.length)
+
+    const returnedTitles = response.body.map(n => n.title)
+    blogsInDatabase.forEach(blog => {
+      expect(returnedTitles).toContain(blog.title)
+    })
   })
 
-  test('all blogs are returned', async () => {
-    const response = await api.get('/api/blogs')
-    expect(response.body.length).toBe(initialBlogs.length)
-  })
+  test('individual blogs are returned as json by GET /api/blogs/:id', async () => {
+    const blogsInDatabase = await blogsInDb()
+    const aBlog = blogsInDatabase[0]
 
-  test('a specific blog is within the returned notes', async () => {
-    const response = await api.get('/api/blogs')
-    const titles = response.body.map(r => r.title)
-    expect(titles).toContain('Canonical string reduction')
-  })
-
-  test('creating a new blog returns status code 201 and a json', async () => {
     const response = await api
+      .get(`/api/blogs/${aBlog.id}`)
+      .expect(200)
+      .expect('Content-Type', /application\/json/)
+
+    expect(response.body.title).toBe(aBlog.title)
+  })
+})
+
+describe('addition of a new blog', async () => {
+  beforeEach(async () => {
+    await Blog.remove({})
+    const blogObjects = initialBlogs.map(n => new Blog(n))
+    await Promise.all(blogObjects.map(n => n.save()))
+  })
+
+  test('POST /api/blog succeeds with valid data', async () => {
+    const blogsAtStart = await blogsInDb()
+
+    await api
       .post('/api/blogs')
       .send(newBlog)
       .expect(201)
       .expect('Content-Type', /application\/json/)
+
+    const blogsAfterOperation = await blogsInDb()
+
+    expect(blogsAfterOperation.length).toBe(blogsAtStart.length + 1)
+
+    const titles = blogsAfterOperation.map(r => r.title)
+    expect(titles).toContain(newBlog.title)
   })
 
-  test('the length of bloglist is now one longer than initial list', async () => {
-    const response = await api.get('/api/blogs')
-    expect(response.body.length).toBe(initialBlogs.length + 1)
+  test('if a blog with no likes defined is added, it must have zero likes', async () => {
+    const response = await api.post('/api/blogs').send(newBlog)
+
+    const newBlogFromDB = response.body
+    expect(newBlogFromDB.likes).toBe(0)
   })
 
-  test('the author of just added blog can be found from the blog list', async () => {
-    const response = await api.get('/api/blogs')
-    const authors = response.body.map(r => r.author)
-    expect(authors).toContain('Chris Coyier')
+  test('if blog with no title is added the api returns status code 400', async () => {
+    await api
+      .post('/api/blogs')
+      .send(newBlogWithoutTitle)
+      .expect(400)
+  })
+
+  test('if blog with no url is added the api returns status code 400', async () => {
+    await api
+      .post('/api/blogs')
+      .send(newBlogWithoutUrl)
+      .expect(400)
+  })
+})
+
+describe('deletion of a blog', async () => {
+  let addedBlog
+
+  beforeAll(async () => {
+    addedBlog = new Blog(newBlog)
+    await addedBlog.save()
+  })
+
+  test('DELETE /api/blogs/:id succeeds with proper statuscode', async () => {
+    const blogsAtStart = await blogsInDb()
+
+    await api.delete(`/api/blogs/${addedBlog.id}`).expect(204)
+
+    const blogsAfterOperation = await blogsInDb()
+
+    const titles = blogsAfterOperation.map(r => r.title)
+
+    expect(titles).not.toContain(addedBlog.title)
+    expect(blogsAfterOperation.length).toBe(blogsAtStart.length - 1)
+  })
+})
+
+describe('PUT request on /api/blogs/:id', () => {
+  beforeAll(async () => {
+    await Blog.remove({})
+    const blogObjects = initialBlogs.map(n => new Blog(n))
+    await Promise.all(blogObjects.map(n => n.save()))
+  })
+
+  test('a blog in database can be updated', async () => {
+    const blogsInDatabase = await blogsInDb()
+    const aBlog = blogsInDatabase[0]
+
+    aBlog.likes++
+
+    await api
+      .put(`/api/blogs/${aBlog.id}`)
+      .send(aBlog)
+      .expect(200)
+
+    const bBlog = await api.get(`/api/blogs/${aBlog.id}`).expect(200)
+    expect(aBlog.title).toEqual(bBlog.body.title)
+    expect(aBlog.likes).toEqual(bBlog.body.likes)
   })
 })
 
