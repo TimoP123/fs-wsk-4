@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/TimoP123/fs-wsk-4#readme",
   "dependencies": {
+    "bcrypt": "^1.0.3",
     "cors": "^2.8.4",
     "dotenv": "^5.0.0",
     "express": "^4.16.2",

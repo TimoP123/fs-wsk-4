@@ -2,7 +2,8 @@ const supertest = require('supertest')
 const { app, server } = require('../index')
 const api = supertest(app)
 const Blog = require('../models/blog')
-const { format, blogsInDb } = require('./test_helper')
+const User = require('../models/user')
+const { blogsInDb, usersInDb } = require('./test_helper')
 
 const initialBlogs = [
   {
@@ -72,6 +73,39 @@ const newBlogWithoutTitle = {
 const newBlogWithoutUrl = {
   title: 'A Complete Guide to Flexbox',
   author: 'Chris Coyier'
+}
+
+const initialUsers = [
+  {
+    username: 'iivo',
+    name: 'Iivo Niskanen',
+    password: 'asdfghjk',
+    fullAge: true
+  },
+  {
+    username: 'kake',
+    name: 'Kake Randelin',
+    password: 'sdfghj',
+    fullAge: true
+  },
+  {
+    username: 'ankanpojat',
+    name: 'Tupu, Hupu ja Lupu',
+    password: 'sdfgh',
+    fullAge: false
+  }
+]
+
+const newUser = {
+  username: 'pokeman',
+  name: 'Viljo Nuorimies',
+  password: 'sdfkjh'
+}
+
+const newUserWithTooShortPassword = {
+  username: 'pokeman',
+  name: 'Viljo Nuorimies',
+  password: 'sh'
 }
 
 beforeAll(async () => {
@@ -204,6 +238,60 @@ describe('PUT request on /api/blogs/:id', () => {
     const bBlog = await api.get(`/api/blogs/${aBlog.id}`).expect(200)
     expect(aBlog.title).toEqual(bBlog.body.title)
     expect(aBlog.likes).toEqual(bBlog.body.likes)
+  })
+})
+
+describe('addition of a new user', async () => {
+  beforeEach(async () => {
+    await User.remove({})
+    const userObjects = initialUsers.map(n => new User(n))
+    await Promise.all(userObjects.map(n => n.save()))
+  })
+
+  test('POST /api/users succeeds with valid data', async () => {
+    const usersAtStart = await usersInDb()
+
+    await api
+      .post('/api/users')
+      .send(newUser)
+      .expect(201)
+      .expect('Content-Type', /application\/json/)
+
+    const usersAfterOperation = await usersInDb()
+
+    expect(usersAfterOperation.length).toBe(usersAtStart.length + 1)
+
+    const usernames = usersAfterOperation.map(r => r.username)
+    expect(usernames).toContain(newUser.username)
+  })
+
+  test('if a user with no fullAge defined is added, it must be set true as default', async () => {
+    const response = await api.post('/api/users').send(newUser)
+
+    const newUserFromDB = response.body
+    expect(newUserFromDB.fullAge).toBe(true)
+  })
+
+  test('if a user with an already taken username is posted, operation fails with statuscode 400', async () => {
+    const response = await api.post('/api/users').send(newUser)
+
+    const result = await api
+      .post('/api/users')
+      .send(newUser)
+      .expect(400)
+
+    expect(result.body).toEqual({ error: 'username must be unique' })
+  })
+
+  test('if a user with too short password is added the operation fails with status code 400', async () => {
+    const result = await api
+      .post('/api/users')
+      .send(newUserWithTooShortPassword)
+      .expect(400)
+
+    expect(result.body).toEqual({
+      error: 'password must be at least 3 characters'
+    })
   })
 })
 
