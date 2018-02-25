@@ -216,24 +216,36 @@ describe('addition of a new blog', async () => {
 })
 
 describe('deletion of a blog', async () => {
-  let addedBlog
-
   beforeAll(async () => {
-    addedBlog = new Blog(newBlog)
-    await addedBlog.save()
+    await Blog.remove({})
+    const blogObjects = initialBlogs.map(n => new Blog(n))
+    await Promise.all(blogObjects.map(n => n.save()))
+    await User.remove({})
+    const userObjects = initialUsers.map(n => new User(n))
+    await Promise.all(userObjects.map(n => n.save()))
   })
 
   test('DELETE /api/blogs/:id succeeds with proper statuscode', async () => {
     const blogsAtStart = await blogsInDb()
+    const users = await usersInDb()
+    const user = users[0]
+    let addedBlog = new Blog(newBlog)
+    const response = await api
+      .post('/api/blogs')
+      .set('Authorization', `bearer ${getToken(user.id, user.username)}`)
+      .send(addedBlog)
 
-    await api.delete(`/api/blogs/${addedBlog.id}`).expect(204)
+    await api
+      .delete(`/api/blogs/${response.body._id}`)
+      .set('Authorization', `bearer ${getToken(user.id, user.username)}`)
+      .expect(204)
 
     const blogsAfterOperation = await blogsInDb()
 
     const titles = blogsAfterOperation.map(r => r.title)
 
     expect(titles).not.toContain(addedBlog.title)
-    expect(blogsAfterOperation.length).toBe(blogsAtStart.length - 1)
+    expect(blogsAfterOperation.length).toBe(blogsAtStart.length)
   })
 })
 
