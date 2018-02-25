@@ -2,19 +2,10 @@ const bcrypt = require('bcrypt')
 const usersRouter = require('express').Router()
 const User = require('../models/user')
 
-const formatUser = user => {
-  return {
-    id: user._id,
-    username: user.username,
-    name: user.name,
-    fullAge: user.fullAge
-  }
-}
-
 usersRouter.get('/', async (request, response) => {
   try {
-    const users = await User.find({})
-    response.status(200).json(users.map(formatUser))
+    const users = await User.find({}).populate('blogs')
+    response.status(200).json(users.map(User.format))
   } catch (exception) {
     response.status(500).json({ error: 'something went wrong...' })
   }

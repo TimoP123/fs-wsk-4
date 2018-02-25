@@ -1,20 +1,20 @@
 const blogsRouter = require('express').Router()
 const Blog = require('../models/blog')
+const User = require('../models/user')
+const jwt = require('jsonwebtoken')
 
-const formatBlog = blog => {
-  return {
-    id: blog._id,
-    title: blog.title,
-    author: blog.author,
-    url: blog.url,
-    likes: blog.likes
+const getTokenFrom = request => {
+  const authorization = request.get('authorization')
+  if (authorization && authorization.toLowerCase().startsWith('bearer ')) {
+    return authorization.substring(7)
   }
+  return null
 }
 
 blogsRouter.get('/', async (request, response) => {
   try {
-    const blogs = await Blog.find({})
-    response.json(blogs.map(formatBlog))
+    const blogs = await Blog.find({}).populate('user', { username: 1, name: 1 })
+    response.json(blogs)
   } catch (exception) {
     response.status(500).json({ error: 'something went wrong...' })
   }
@@ -22,10 +22,13 @@ blogsRouter.get('/', async (request, response) => {
 
 blogsRouter.get('/:id', async (request, response) => {
   try {
-    const blog = await Blog.findById(request.params.id)
+    const blog = await Blog.findById(request.params.id).populate('user', {
+      username: 1,
+      name: 1
+    })
 
     if (blog) {
-      response.json(formatBlog(blog))
+      response.json(blog)
     } else {
       response.status(404).end()
     }
@@ -37,26 +40,48 @@ blogsRouter.get('/:id', async (request, response) => {
 
 blogsRouter.post('/', async (request, response) => {
   try {
-    const blog = new Blog(request.body)
+    const body = request.body
+
+    const token = getTokenFrom(request)
+    const decodedToken = jwt.verify(token, process.env.SECRET)
+
+    if (!token || !decodedToken.id) {
+      return response.status(401).json({ error: 'token missing or invalid' })
+    }
 
     if (
-      blog.title === undefined ||
-      blog.url === undefined ||
-      blog.author === undefined
+      body.title === undefined ||
+      body.url === undefined ||
+      body.author === undefined
     ) {
       return response
         .status(400)
         .json({ error: 'Title, author or url missing' })
     }
 
-    if (blog.likes === undefined) {
-      blog.likes = 0
-    }
+    const user = await User.findById(decodedToken.id)
+
+    const blog = new Blog({
+      title: body.title,
+      author: body.author,
+      url: body.url,
+      likes: 0,
+      user: user._id
+    })
 
     const savedBlog = await blog.save()
+
+    user.blogs = user.blogs.concat(savedBlog._id)
+    await user.save()
+
     response.status(201).json(savedBlog)
   } catch (exception) {
-    response.status(500).json({ error: 'something went wrong...' })
+    if (exception.name === 'JsonWebTokenError') {
+      response.status(401).json({ error: exception.message })
+    } else {
+      console.log(exception)
+      response.status(500).json({ error: 'something went wrong...' })
+    }
   }
 })
 

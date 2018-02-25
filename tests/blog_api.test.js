@@ -3,7 +3,7 @@ const { app, server } = require('../index')
 const api = supertest(app)
 const Blog = require('../models/blog')
 const User = require('../models/user')
-const { blogsInDb, usersInDb } = require('./test_helper')
+const { blogsInDb, usersInDb, getToken } = require('./test_helper')
 
 const initialBlogs = [
   {
@@ -154,14 +154,20 @@ describe('addition of a new blog', async () => {
     await Blog.remove({})
     const blogObjects = initialBlogs.map(n => new Blog(n))
     await Promise.all(blogObjects.map(n => n.save()))
+    await User.remove({})
+    const userObjects = initialUsers.map(n => new User(n))
+    await Promise.all(userObjects.map(n => n.save()))
   })
 
   test('POST /api/blog succeeds with valid data', async () => {
     const blogsAtStart = await blogsInDb()
+    const users = await usersInDb()
+    const user = users[0]
 
     await api
       .post('/api/blogs')
       .send(newBlog)
+      .set('Authorization', `bearer ${getToken(user.id, user.username)}`)
       .expect(201)
       .expect('Content-Type', /application\/json/)
 
@@ -174,23 +180,37 @@ describe('addition of a new blog', async () => {
   })
 
   test('if a blog with no likes defined is added, it must have zero likes', async () => {
-    const response = await api.post('/api/blogs').send(newBlog)
+    const users = await usersInDb()
+    const user = users[0]
+
+    const response = await api
+      .post('/api/blogs')
+      .send(newBlog)
+      .set('Authorization', `bearer ${getToken(user.id, user.username)}`)
 
     const newBlogFromDB = response.body
     expect(newBlogFromDB.likes).toBe(0)
   })
 
   test('if blog with no title is added the api returns status code 400', async () => {
+    const users = await usersInDb()
+    const user = users[0]
+
     await api
       .post('/api/blogs')
       .send(newBlogWithoutTitle)
+      .set('Authorization', `bearer ${getToken(user.id, user.username)}`)
       .expect(400)
   })
 
   test('if blog with no url is added the api returns status code 400', async () => {
+    const users = await usersInDb()
+    const user = users[0]
+
     await api
       .post('/api/blogs')
       .send(newBlogWithoutUrl)
+      .set('Authorization', `bearer ${getToken(user.id, user.username)}`)
       .expect(400)
   })
 })
